@@ -142,6 +142,55 @@ THSEC = f'''<h2 id="gross">Nachtrag: Nur große H4-ZigZags (Mindest-Swinggröße
 <p><b>Bewertung inkl. Mehrfachtests:</b> 9 Schwellen × 2 Skalierungen = 18 Varianten je Zeitraum. Einige sind im In-Sample leicht positiv (z. B. 20 $, 2 %, 3 % mit 1-1-1-1), fallen im Out-of-Sample aber alle unter PF 1. Einzige Ausnahme ist 100 $: gesamt PF {de(b100["ohne Skalierung"]["Gesamt"]["profit_factor"])} ohne Skalierung bzw. {de(b100["1-1-1-1, fester SL"]["Gesamt"]["profit_factor"])} mit 1-1-1-1. Das beruht aber auf nur {b100["ohne Skalierung"]["Gesamt"]["n"]} Trades in 11 Jahren (IS 6, OOS 11), mit Out-of-Sample-PF {de(b100["ohne Skalierung"]["OOS 2022–2025"]["profit_factor"])} bzw. {de(b100["1-1-1-1, fester SL"]["OOS 2022–2025"]["profit_factor"])}, p = {de(b100["ohne Skalierung"]["Gesamt"]["p_value"],2)}. Das ist statistisch nicht von Zufall unterscheidbar. Nach Holm-Korrektur ist kein Ergebnis signifikant. <b>Auch mit großen ZigZags zeigen die Daten keine positive Erwartung nach Kosten.</b></p>
 '''
 
+IM = json.load(open(OUT + '/improve.json')); shutil.copy(OUT + '/improve.json', SITE + '/improve.json'); shutil.copy(OUT + '/preregistration.json', SITE + '/preregistration.json')
+IR = IM['results']
+cols = [('n','n'),('win_rate','Treffer'),('avg_win','Ø Gewinn'),('avg_loss','Ø Verlust'),('expectancy','Erwartung $'),('profit_factor','PF'),('net_total','Netto $'),('costs_swap','Swap $'),('max_dd','Max DD $'),('longest_losing_streak','Verlustserie'),('peak_margin_1_100','Margin 1:100'),('peak_margin_1_500','Margin 1:500'),('p_one_sided','p einseitig'),('p_holm','p Holm (28)')]
+it = '<table><tr><th>Variante</th><th>Zeitraum</th>' + ''.join(f'<th>{c[1]}</th>' for c in cols) + '</tr>'
+for n, d in IR.items():
+    for per in ('IS 2015–2021', 'OOS 2022–2025'):
+        m = d[per]
+        it += f'<tr><td>{html.escape(n)}</td><td>{per[:3]}</td>' + ''.join(f'<td>{pct(m.get(k)) if k == "win_rate" else de(m.get(k), 3 if k.startswith("p_") else 2)}</td>' for k, _ in cols) + '</tr>'
+it += '</table>'
+ireg = '<table><tr><th>Variante</th><th>Zeitraum</th>' + ''.join(f'<th>{r} n / Erw. $ / PF</th>' for r in ('Aufwärtstrend', 'Abwärtstrend', 'Seitwärts')) + '<th>Long n / Netto $</th><th>Short n / Netto $</th></tr>'
+for n, d in IR.items():
+    for per in ('IS 2015–2021', 'OOS 2022–2025'):
+        br = d[per].get('by_regime', {})
+        ireg += f'<tr><td>{html.escape(n)}</td><td>{per[:3]}</td>' + ''.join((f'<td>{br[r]["n"]} / {de(br[r]["expectancy"])} / {de(br[r]["profit_factor"])}</td>' if r in br else '<td>–</td>') for r in ('Aufwärtstrend', 'Abwärtstrend', 'Seitwärts'))
+        ireg += (f'<td>{d["Richtung"]["Long"]["n"]} / {de(d["Richtung"]["Long"]["net"])}</td><td>{d["Richtung"]["Short"]["n"]} / {de(d["Richtung"]["Short"]["net"])}</td>' if per.startswith('IS') else '<td colspan="2">(gesamt, s. IS-Zeile)</td>') + '</tr>'
+ireg += '</table>'
+iwf = ''
+for fam, w in IM['walkforward'].items():
+    t = w['total']
+    iwf += f'<h4>{html.escape(fam)}: {t["n"]} Trades, Treffer {pct(t["win_rate"])}, Erwartung {de(t["expectancy"])} $, PF {de(t["profit_factor"])}, Netto {de(t["net_total"])} $, Max DD {de(t["max_dd"])} $, Verlustserie {t["longest_losing_streak"]}, p einseitig {de(t["p_one_sided"],3)}</h4>'
+    iwf += '<table><tr><th>Testjahr</th><th>gewählt (beste der 3 Vorjahre)</th><th>PF Training</th><th>n</th><th>PF Test</th><th>Netto $</th></tr>' + ''.join(f'<tr><td>{y["year"]}</td><td>{html.escape(y["pick"])}</td><td>{de(y["train_pf"])}</td><td>{y["n"]}</td><td>{de(y["pf"])}</td><td>{de(y["net"])}</td></tr>' for y in w['years']) + '</table>'
+irob = '<table><tr><th>Variante</th><th>IS-PF&gt;1</th><th>OOS-PF&gt;1</th><th>WF-PF&gt;1</th><th>Holm-p&lt;0,05</th><th>robust?</th></tr>' + ''.join(
+    f'<tr><td>{html.escape(n)}</td><td>{"✔" if (v["IS_pf"] or 0) > 1 else "✘"} {de(v["IS_pf"])}</td><td>{"✔" if (v["OOS_pf"] or 0) > 1 else "✘"} {de(v["OOS_pf"])}</td><td>{"–" if v["WF_pf"] is None else ("✔ " if v["WF_pf"] > 1 else "✘ ") + de(v["WF_pf"])}</td><td>{"✔" if v["p_holm_oos"] < .05 else "✘"} {de(v["p_holm_oos"],3)}</td><td><b>{"ja" if v["robust"] else "nein"}</b></td></tr>' for n, v in IM['robust'].items()) + '</table>'
+cand = IR['V2 Ausbruch+Trendfilter | C4 | 2×ATR']; bh = IM['buy_hold_0_01lot_usd']
+IMSEC = f"""<h2 id="ideen">Nachtrag: Verbesserungsideen (vorab registriert)</h2>
+<p>Aus den Befunden abgeleitet (Umkehr an der Linie funktioniert nicht, bestätigte Ausbrüche laufen leicht überzufällig weiter). <b>Vor dem Lauf festgelegt</b> (<a href="preregistration.json">preregistration.json</a>): 28 Varianten ohne Parameter-Optimierung, SL 1 ATR, 1 Position 0,01 Lot, gleiche Daten und Kosten. Test: einseitiger t-Test „Erwartung &gt; 0“ im OOS, Holm-Korrektur über alle 28. <b>Robust</b> heißt: IS-PF &gt; 1 und OOS-PF &gt; 1 und Walk-Forward-PF &gt; 1 und Holm-p &lt; 0,05. Nur dann wird der EA erweitert.</p>
+<ul>
+<li><b>V1 Ausbruchs-Folge:</b> Markt-Einstieg zur nächsten H4-Eröffnung nach bestätigtem Ausbruch (C3: Schluss außerhalb + ATR-Expansion; C4: zwei Schlüsse außerhalb). SL = gebrochene Linie ∓ 1 ATR, TP = Linie ± Range-Breite. Ranges aus 2×ATR-, 40-$-, 2-%- und 3-%-ZigZag.</li>
+<li><b>V2 Trendfilter D1:</b> Vortages-Schluss über/unter SMA200 (D1), nur Trades in diese Richtung. Angewendet auf V1 und auf die ursprüngliche Umkehr-Strategie.</li>
+<li><b>V3 Retest:</b> Nach bestätigtem Ausbruch Limit-Einstieg beim ersten Rücklauf an die gebrochene Linie (max. 30 H4-Kerzen), gleicher SL/TP.</li>
+<li><b>V4:</b> Umkehr mit 1-1-1-1, SL fest bis ½ des Ziels, dann auf Einstieg, bei ¾ auf ¼.</li>
+<li><b>V5 Kosten:</b> swapfreies Konto; Schließen vor dem täglichen Rollover.</li>
+</ul>
+<h3>Alle Kennzahlen</h3>{it}
+<h3>Nach Regime und Richtung</h3>{ireg}
+<h3>Walk-Forward je Familie (2018–2025)</h3>{iwf}
+<h3>Robustheitsprüfung</h3>{irob}
+<img src="charts/improve.png" alt="Equity Varianten">
+<h3>Ehrliches Fazit</h3>
+<div class="verdict"><b>Keine Variante erfüllt das vorab festgelegte Robustheitskriterium.</b> Deshalb wurde der EA <b>nicht</b> erweitert.</div>
+<ul>
+<li><b>Umkehr-Strategie:</b> Auch mit Trendfilter (OOS-PF {de(IR["V2 Umkehr+Trendfilter"]["OOS 2022–2025"]["profit_factor"])}, IS {de(IR["V2 Umkehr+Trendfilter"]["IS 2015–2021"]["profit_factor"])}), swapfrei (IS {de(IR["V5 Umkehr swapfrei"]["IS 2015–2021"]["profit_factor"])} / OOS {de(IR["V5 Umkehr swapfrei"]["OOS 2022–2025"]["profit_factor"])}), mit Schließen vor dem Rollover oder mit 1-1-1-1 (SL ab ½) bleibt sie negativ. Kostensenkung allein rettet sie nicht.</li>
+<li><b>Retest (V3):</b> negativ (Walk-Forward PF {de(IM["walkforward"]["V3 Retest"]["total"]["profit_factor"])}).</li>
+<li><b>Interessantester Kandidat: Ausbruchs-Folge mit D1-Trendfilter</b>, besonders C4 / 2×ATR: IS-PF {de(cand["IS 2015–2021"]["profit_factor"])}, OOS-PF {de(cand["OOS 2022–2025"]["profit_factor"])}, Familien-Walk-Forward PF {de(IM["walkforward"]["V2 Ausbruch+Trendfilter"]["total"]["profit_factor"])} (p einseitig {de(IM["walkforward"]["V2 Ausbruch+Trendfilter"]["total"]["p_one_sided"],3)}). Nach Holm-Korrektur ist das aber <b>nicht signifikant</b> (p = {de(cand["OOS 2022–2025"]["p_holm"],2)}). Die 3-%-Varianten sind im OOS stark, im IS aber klar negativ – kein stabiles Muster.</li>
+<li><b>Wichtiger Vorbehalt Drift:</b> Gold stieg 2015–2025 stark (Buy &amp; Hold 0,01 Lot: +{de(bh["IS"])} $ IS, +{de(bh["OOS"])} $ OOS). Die Ausbruchs-Gewinne kommen überwiegend aus Long-Trades. Das kann schlicht der Gold-Aufwärtstrend sein und muss kein wiederholbarer Vorteil des Systems sein. In einem fallenden Goldmarkt wäre das Ergebnis vermutlich anders – mit diesen Daten nicht prüfbar.</li>
+<li><b>Empfehlung:</b> Die Variante „Ausbruch + Trendfilter (C4, 2×ATR)“ nur als Hypothese weiterverfolgen. Unverändert (ohne neue Parameter) auf neuen Daten testen, z. B. ab 2026 auf einem Demokonto oder auf anderen Märkten (Silber, Indizes), bevor sie in den EA kommt.</li>
+</ul>
+"""
+
 mq5 = html.escape(open(BASE + '/mql5/JawadStrategie.mq5').read())
 regA = ''.join(f'<tr><td>{nm}</td><td>{r["legs"]}</td><td>{r["up_legs"]}</td><td>{r["down_legs"]}</td><td>{de(r["up_size_atr"])}</td><td>{de(r["down_size_atr"])}</td><td>{de(r["up_bars"],0)}</td><td>{de(r["down_bars"],0)}</td></tr>' for nm, r in S2['by_regime'].items())
 corrA = ''.join(f'<tr><td>{nm}</td><td>{r["n"]}</td><td>{pct(r["retr_ge_0.382"])}</td><td>{pct(r["retr_ge_0.5"])}</td><td>{pct(r["retr_ge_0.618"])}</td><td>{pct(r["retr_ge_1.0"])}</td><td>{pct(S2["corrections_null"][nm]["retr_ge_0.5"])}</td><td>{pct(S2["corrections_null"][nm]["retr_ge_1.0"])}</td></tr>' for nm, r in S2['corrections'].items())
@@ -166,7 +215,7 @@ nav a{{margin-right:12px}} .btn{{display:inline-block;background:#8a6d0b;color:#
 </style></head><body>
 <h1>Jawad Strategie – XAUUSD ZigZag-/Range-Handelssystem</h1>
 <p><b>Forschungsbericht</b> · Stand 19.10.2026 · Daten: XAUUSD M15/H1/H4 (Bid+Ask), 01.01.2015–31.12.2025 (UTC).</p>
-<nav><a href="#fazit">Fazit</a><a href="#daten">Daten</a><a href="#a">A Analyse</a><a href="#b">B Algorithmus</a><a href="#c">C Regeln</a><a href="#d">D Skalierung</a><a href="#e">E Ausbruch</a><a href="#f">F Backtest</a><a href="#gross">Große ZigZags</a><a href="#risiken">Risiken</a><a href="#g">G MQL5</a><a href="#install">Installation</a></nav>
+<nav><a href="#fazit">Fazit</a><a href="#daten">Daten</a><a href="#a">A Analyse</a><a href="#b">B Algorithmus</a><a href="#c">C Regeln</a><a href="#d">D Skalierung</a><a href="#e">E Ausbruch</a><a href="#f">F Backtest</a><a href="#gross">Große ZigZags</a><a href="#ideen">Ideen</a><a href="#risiken">Risiken</a><a href="#g">G MQL5</a><a href="#install">Installation</a></nav>
 
 <h2 id="fazit">Fazit in Klartext</h2>
 <div class="verdict"><b>Die Daten zeigen KEINE positive Erwartung nach Kosten.</b> Keine der 24 getesteten Parameter-Kombinationen hatte im In-Sample-Zeitraum (2015–2021) einen Profitfaktor über 1; im Out-of-Sample-Zeitraum (2022–2025) lag nur 1 von 24 knapp darüber (Zufallstreffer zu erwarten). Die Standardvariante (bestätigte Umkehr auf H1) verlor nach Kosten im Schnitt {de(M["confH1"]["Gesamt"]["expectancy"])} $ je Trade à 0,01 Lot (PF {de(M["confH1"]["Gesamt"]["profit_factor"])}); selbst <i>ohne jegliche Kosten</i> liegt sie praktisch bei null (PF {de(cf["Gesamt"]["profit_factor"])}). Der Walk-Forward-Test (Parameter jährlich neu aus den 3 Vorjahren gewählt) ergab PF {de(wf["total"]["profit_factor"])} und {de(wf["total"]["net_total"])} $.</div>
@@ -268,6 +317,7 @@ nav a{{margin-right:12px}} .btn{{display:inline-block;background:#8a6d0b;color:#
 <img src="charts/walkforward.png" alt="Walk-Forward">
 
 {THSEC}
+{IMSEC}
 <h2 id="risiken">Größte Risiken</h2>
 <ol>
 <li><b>Keine nachgewiesene Erwartung</b>: Die Idee „an der Linie umkehren“ ist in 11 Jahren Gold-Daten nicht besser als Zufall; Kosten machen sie negativ.</li>

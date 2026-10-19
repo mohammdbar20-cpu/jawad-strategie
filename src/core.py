@@ -78,6 +78,7 @@ def range_state(h4, k=2.0, crit='C34', minW=3.0, maxW=20.0, nmem=2, thr=None):
     n = len(c)
     U = np.full(n, np.nan); Lo = np.full(n, np.nan); valid = np.zeros(n, bool)
     bo = np.zeros(n, int); rid = np.zeros(n, int); npiv = np.zeros(n, int)
+    boU = np.full(n, np.nan); boL = np.full(n, np.nan)
     by_conf = {}
     for p in piv: by_conf.setdefault(p[3], []).append(p)
     highs, lows = [], []; last_bo = -1; cu = cl = np.nan; cvalid = False; prev_out = 0; cur_id = 0
@@ -87,7 +88,7 @@ def range_state(h4, k=2.0, crit='C34', minW=3.0, maxW=20.0, nmem=2, thr=None):
             s = bo_signal(crit, i, o, h, l, c, tr, cu, cl, a[i-1], prev_out)
             prev_out = 1 if c[i] > cu else (-1 if c[i] < cl else 0)
             if s != 0:
-                bo[i] = s; last_bo = i; highs, lows = [], []; cvalid = False; prev_out = 0
+                bo[i] = s; boU[i] = cu; boL[i] = cl; last_bo = i; highs, lows = [], []; cvalid = False; prev_out = 0
         # 2) Neue bestätigte Pivots
         for p in by_conf.get(i, []):
             if p[0] >= last_bo:
@@ -109,4 +110,4 @@ def range_state(h4, k=2.0, crit='C34', minW=3.0, maxW=20.0, nmem=2, thr=None):
         valid[i] = cvalid and (cl < c[i] < cu)   # Einstiege nur, wenn Schluss innerhalb
         rid[i] = cur_id if cvalid else -1
         npiv[i] = len(highs) + len(lows)
-    return dict(U=U, L=Lo, valid=valid, bo=bo, rid=rid, atr=a, tr=tr, piv=piv)
+    return dict(U=U, L=Lo, valid=valid, bo=bo, rid=rid, atr=a, tr=tr, piv=piv, boU=boU, boL=boL)

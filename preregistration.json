@@ -1,0 +1,13 @@
+{
+ "registered_at": "2026-10-19T14:50+02:00 (vor dem Lauf)",
+ "data": "XAUUSD M15 2015-2025, IS 2015-2021, OOS 2022-2025, Basiskosten (Spread 0,30, Komm. 7$/Lot, Slip 0,05, Swap-Modell)",
+ "fixed_params": "SL-Puffer 1 ATR, Mindestbreite 3 ATR, 1 Position 0,01 Lot (außer V4), keine Optimierung",
+ "V1_breakout": "Einstieg Markt zur nächsten H4-Eröffnung nach bestätigtem Ausbruch (C3: Schluss außerhalb + TR>=1,5 ATR; C4: zwei Schlüsse außerhalb), SL = gebrochene Linie -/+ 1 ATR, TP = Linie +/- Rangebreite, CRV>=1; Ranges: 2xATR, 40$, 2%, 3% => 8 Varianten",
+ "V2_trendfilter": "D1-Schluss (Vortag) vs. SMA200: nur Trades in Trendrichtung; auf die 8 V1-Varianten und die Standard-Umkehr => 9 Varianten",
+ "V3_retest": "nach bestätigtem Ausbruch Limit an der gebrochenen Linie in Ausbruchsrichtung, gültig 30 H4-Kerzen, verfällt wenn TP vorher erreicht; SL Linie -/+ 1 ATR, TP Linie +/- Rangebreite => 8 Varianten",
+ "V4_flat_late": "Standard-Umkehr, 1-1-1-1, SL fest bis 1/2 des Ziels, dann auf Einstieg, bei 3/4 auf 1/4 => 1 Variante",
+ "V5_costs": "Standard-Umkehr swapfrei; Standard-Umkehr mit Schließen vor dem Rollover (letzte M15 vor 22:00 UTC) => 2 Varianten",
+ "test": "einseitiger t-Test H1: Erwartung>0 je Trade, OOS; Holm-Korrektur über alle 28 Varianten, alpha 0,05",
+ "robust_edge_definition": "IS-PF>1 UND OOS-PF>1 UND Walk-Forward-PF>1 (Familie) UND Holm-p(OOS)<0,05; nur dann EA-Erweiterung",
+ "walkforward": "Familien V1, V2-Ausbruch, V3: jedes Testjahr 2018-2025 die Variante mit bestem PF der 3 Vorjahre (min. 10 Trades)"
+}

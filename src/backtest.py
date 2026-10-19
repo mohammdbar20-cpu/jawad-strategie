@@ -26,6 +26,10 @@ class Ctx:
         self.h1_pl = gp.l.reindex(hr).values; self.h1_ph = gp.h.reindex(hr).values
         self.m15_pl = np.r_[np.nan, self.l[:-1]]; self.m15_ph = np.r_[np.nan, self.h[:-1]]
         self.reg, _ = core.regime(self.h4.c.values)
+        d1 = m.c.resample('1D').last().dropna(); sma = d1.rolling(200).mean()
+        td = np.sign(d1 - sma).where(sma.notna(), 0).shift(1)   # Wert des VORTAGES (abgeschlossen)
+        hd = self.h4.index.normalize()
+        self.trend = td.reindex(hd, method='ffill').fillna(0).values.astype(int)
         self._st = {}
     def state(self, k, crit, minW, thr=None, maxW=20.0):
         key = (k, crit, minW, thr, maxW)
@@ -34,11 +38,13 @@ class Ctx:
 
 def run(ctx, k=2.0, crit='C34', minW=3.0, slB=1.0, entry='confH1', scale='none', stop='fixed',
         spread=0.30, slip=0.05, comm_lot=7.0, swap=True, risk_cap=None, lev=100, zone=0.25, tp_buf=0.1,
-        expiry_h=24, rr_min=1.0, bo_exit=True, start=None, end=None, thr=None, maxW=20.0):
+        expiry_h=24, rr_min=1.0, bo_exit=True, start=None, end=None, thr=None, maxW=20.0,
+        mode='reversal', trend_filter=False, rollover_close=False, rt_exp_h4=30):
     st = ctx.state(k, crit, minW, thr, maxW)
     U_, L_, V_, R_, A_, BO_ = st['U'], st['L'], st['valid'], st['rid'], st['atr'], st['bo']
+    BU_, BL_ = st['boU'], st['boL']; TR_ = ctx.trend; rt = None
     o, h, l, c, hi = ctx.o, ctx.h, ctx.l, ctx.c, ctx.hi
-    n = len(o); units = [1, 2, 4, 8] if scale == 'pyr' else [1, 1, 1, 1] if scale == 'flat' else ([1, 0, 0, 0] if stop == 'step' else [1])
+    n = len(o); units = [1, 2, 4, 8] if scale == 'pyr' else [1, 1, 1, 1] if scale == 'flat' else ([1, 0, 0, 0] if stop in ('step', 'late') else [1])
     fr = [0, .25, .5, .75]
     j0 = 0 if start is None else int(np.searchsorted(ctx.t.values, np.datetime64(start)))
     j1 = n if end is None else int(np.searchsorted(ctx.t.values, np.datetime64(end)))
@@ -113,6 +119,7 @@ def run(ctx, k=2.0, crit='C34', minW=3.0, slB=1.0, entry='confH1', scale='none',
                         if u > 0: open_pos(j, d, fill_b, u)
                         hit_any_add = True
                         if stop == 'step': bk['sl'] = bk['E'] + d*fr[bk['adds']-1]*bk['D']
+                        elif stop == 'late' and bk['adds'] >= 2: bk['sl'] = bk['E'] + d*fr[bk['adds']-2]*bk['D']
                         bk['adds'] += 1
                     adv = l[j] if d == 1 else h[j] + s_h
                     favx = h[j] if d == 1 else l[j] + s_l
@@ -120,15 +127,41 @@ def run(ctx, k=2.0, crit='C34', minW=3.0, slB=1.0, entry='confH1', scale='none',
                     if hit_sl:
                         if hit_tp: ambig += 1
                         px = bk['sl'] - d*slip
-                        close_all(j, px if d == 1 else px - s_h, 'SL' if not (stop == 'step' and bk['adds'] > 1) else 'SL(nachgez.)')
+                        close_all(j, px if d == 1 else px - s_h, 'SL' if not (stop in ('step', 'late') and bk['adds'] > 1) else 'SL(nachgez.)')
                     elif hit_tp:
                         close_all(j, bk['tp'] if d == 1 else bk['tp'] - s_l, 'TP')
-        # Einstiegslogik
-        if bk is None and pend is None and V_[g]:
+        newh4 = ctx.hi[j-1] != hi[j]
+        if mode in ('breakout', 'retest') and newh4 and BO_[g] != 0 and not np.isnan(BU_[g]):
+            d = BO_[g]; line = BU_[g] if d == 1 else BL_[g]; W = BU_[g] - BL_[g]
+            if not (trend_filter and TR_[g] != d):
+                if mode == 'breakout' and bk is None:
+                    fill = o[j] + d*slip; e = fill + (S(j) if d == 1 else 0)
+                    sl = line - d*slB*A; tp = line + d*W
+                    if d*(tp - e) >= rr_min*d*(e - sl) and d*(e - sl) > 0:
+                        bk = dict(dir=d, entry_t=ctx.t[j], E=e, sl=sl, tp=tp, D=abs(tp - e), adds=1, rid=-g, reg=int(ctx.reg[g]),
+                                  gross=0.0, comm=0.0, swap=0.0, atr=A, U=BU_[g], L=BL_[g], mode=mode)
+                        open_pos(j, d, fill, units[0])
+                elif mode == 'retest':
+                    rt = dict(d=d, line=line, sl=line - d*slB*A, tp=line + d*W, exp=j + rt_exp_h4*16, g=g, U=BU_[g], L=BL_[g], A=A)
+        if mode == 'retest' and rt is not None and bk is None:
+            d = rt['d']
+            if j > rt['exp'] or d*((h[j] if d == 1 else l[j]) - rt['tp']) >= 0 and not (d*(l[j] if d == 1 else h[j]) <= d*rt['line']):
+                rt = None
+            elif (d == 1 and l[j] <= rt['line']) or (d == -1 and h[j] >= rt['line']):
+                fill = min(rt['line'], o[j]) if d == 1 else max(rt['line'], o[j])
+                bk = dict(dir=d, entry_t=ctx.t[j], E=0, sl=rt['sl'], tp=rt['tp'], D=0, adds=1, rid=-rt['g'], reg=int(ctx.reg[rt['g']]),
+                          gross=0.0, comm=0.0, swap=0.0, atr=rt['A'], U=rt['U'], L=rt['L'], mode=mode)
+                e = open_pos(j, d, fill, units[0]); bk['E'] = e; bk['D'] = abs(rt['tp'] - e); rt = None
+                s_h = S(j, 'h')
+                if (d == -1 and h[j] + s_h >= bk['sl']) or (d == 1 and l[j] <= bk['sl']):
+                    close_all(j, (bk['sl'] + slip - s_h) if d == -1 else bk['sl'] - slip, 'SL')
+        # Einstiegslogik (Umkehr)
+        if mode == 'reversal' and bk is None and pend is None and V_[g]:
             U, L, rid = U_[g], L_[g], R_[g]
             if entry == 'touch':
                 for d in (-1, 1):
                     if (rid, d) in blocked: continue
+                    if trend_filter and TR_[g] != d: continue
                     line = U if d == -1 else L
                     prev_c = c[j-1]
                     if d == -1 and prev_c < U and h[j] >= U:
@@ -149,6 +182,7 @@ def run(ctx, k=2.0, crit='C34', minW=3.0, slB=1.0, entry='confH1', scale='none',
                 if armed is None:
                     for d in (-1, 1):
                         if (rid, d) in blocked: continue
+                        if trend_filter and TR_[g] != d: continue
                         if (d == -1 and h[j] >= U - zone*A) or (d == 1 and l[j] <= L + zone*A):
                             armed = dict(d=d, rid=rid, ext=h[j] if d == -1 else l[j], exp=j + expiry_h*4); break
                 else:
@@ -163,6 +197,8 @@ def run(ctx, k=2.0, crit='C34', minW=3.0, slB=1.0, entry='confH1', scale='none',
                             pend = (d, max(armed['ext'], U) + slB*A, L + tp_buf*A, rid); armed = None
                         elif d == 1 and cc > co and cc > ph and cc > L:
                             pend = (d, min(armed['ext'], L) - slB*A, U - tp_buf*A, rid); armed = None
+        if rollover_close and bk is not None and j + 1 < n and ctx.daychg[j+1]:
+            dd_ = bk['dir']; close_all(j, c[j] - slip if dd_ == 1 else c[j] + slip, 'Rollover')
         # Equity / Margin
         fl = 0.0; mg = 0.0
         for (d, p, u) in pos:
