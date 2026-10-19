@@ -38,7 +38,7 @@ def run(ctx, k=2.0, crit='C34', minW=3.0, slB=1.0, entry='confH1', scale='none',
     st = ctx.state(k, crit, minW)
     U_, L_, V_, R_, A_, BO_ = st['U'], st['L'], st['valid'], st['rid'], st['atr'], st['bo']
     o, h, l, c, hi = ctx.o, ctx.h, ctx.l, ctx.c, ctx.hi
-    n = len(o); units = [1, 2, 4, 8] if scale == 'pyr' else ([1, 0, 0, 0] if stop == 'step' else [1])
+    n = len(o); units = [1, 2, 4, 8] if scale == 'pyr' else [1, 1, 1, 1] if scale == 'flat' else ([1, 0, 0, 0] if stop == 'step' else [1])
     fr = [0, .25, .5, .75]
     j0 = 0 if start is None else int(np.searchsorted(ctx.t.values, np.datetime64(start)))
     j1 = n if end is None else int(np.searchsorted(ctx.t.values, np.datetime64(end)))

@@ -92,6 +92,24 @@ cost_tab_is = mtab({k: v['IS 2015–2021'] for k, v in B['costs'].items()}, [x f
 crit_tab = mtab({k: v['OOS 2022–2025'] for k, v in B['crit_in_strategy'].items()}, [x for x in KEYS if x[0] in ('n', 'win_rate', 'expectancy', 'profit_factor', 'net_total')])
 crit_tab_is = mtab({k: v['IS 2015–2021'] for k, v in B['crit_in_strategy'].items()}, [x for x in KEYS if x[0] in ('n', 'win_rate', 'expectancy', 'profit_factor', 'net_total')])
 M = B['main']; SC = B['scaling']
+
+FL = json.load(open(OUT + '/flat.json')); shutil.copy(OUT + '/flat.json', SITE + '/flat.json')
+FK = [x for x in KEYS if x[0] not in ('gross_total',)]
+fl_is = mtab({k.split(':')[0]: v['IS 2015–2021'] for k, v in FL.items()}, FK)
+fl_oos = mtab({k.split(':')[0]: v['OOS 2022–2025'] for k, v in FL.items()}, FK)
+fl_reg = regtab({k.split(':')[0] + ' ' + p: v[p] for k, v in FL.items() for p in ('IS 2015–2021', 'OOS 2022–2025')})
+fl_names = ''.join(f'<li><b>{html.escape(k.split(":")[0])}</b>: {html.escape(k.split(":", 1)[1])}</li>' for k in FL)
+FLAT = f'''<h3 id="d2">Nachtrag: Gleichmäßige Skalierung 1-1-1-1 (max. 4 Positionen = 0,04 Lot)</h3>
+<p>Gleiche Standardparameter und Kosten wie oben; Nachkauf je 0,01 Lot bei ¼, ½ und ¾ des Ziels, nur in Gewinnrichtung.</p>
+<ul>{fl_names}</ul>
+<p>Mathematik: Ø-Einstieg = (0 + ¼ + ½ + ¾)/4 = 0,375·D; Brutto bei TP 2,5·D (×0,01 Lot) statt 1·D. Nach dem letzten Nachkauf ist der Korb erst bei 0,375·D wieder bei null (Rücklauf 0,375·D möglich, gegenüber nur 0,183·D bei 1-2-4-8). Mit nachgezogenem SL: Rücklauf nach Stufe 2 (SL auf Einstieg) = −0,25·D, nach Stufe 3 (SL auf ¼) = 0, nach Stufe 4 (SL auf ½) = +0,5·D – das Risikoprofil ist also deutlich gutmütiger als bei 1-2-4-8.</p>
+<h4>In-Sample 2015–2021</h4>{fl_is}
+<h4>Out-of-Sample 2022–2025</h4>{fl_oos}
+<h4>Nach Regime</h4>{fl_reg}
+<img src="charts/equity_flat.png" alt="Equity 1-1-1-1">
+<p><b>Bewertung:</b> 1-1-1-1 ist weniger riskant als 1-2-4-8, aber <b>kein Vorteil</b>: Mit festem SL (F1) bleibt die Erwartung negativ (IS {de(FL["F1: 1-1-1-1, fester SL"]["IS 2015–2021"]["expectancy"])} $, OOS {de(FL["F1: 1-1-1-1, fester SL"]["OOS 2022–2025"]["expectancy"])} $ je Korb), der Drawdown steigt gegenüber einer Position etwa auf das 2,3-Fache, und der Swap wächst stark (mehr Volumen über Nacht). Der Profitfaktor ist leicht höher als ohne Skalierung (Gesamt {de(FL["F1: 1-1-1-1, fester SL"]["Gesamt"]["profit_factor"])} vs. {de(FL["S0: 1 Position, fester SL"]["Gesamt"]["profit_factor"])}), das 95 %-Konfidenzintervall der Erwartung umfasst aber klar die Null – nicht signifikant. Mit nachgezogenem SL (F2) wird es deutlich schlechter (PF {de(FL["F2: 1-1-1-1, SL stufenweise nachgezogen"]["Gesamt"]["profit_factor"])}), weil die meisten Körbe nach Stufe 2 am Einstieg ausgestoppt werden. Hinweis: Der MQL5-EA unterstützt aktuell nur 1-2-4-8 bzw. 1 Position; 1-1-1-1 wurde nur im Python-Backtest getestet.</p>
+'''
+
 mq5 = html.escape(open(BASE + '/mql5/JawadStrategie.mq5').read())
 regA = ''.join(f'<tr><td>{nm}</td><td>{r["legs"]}</td><td>{r["up_legs"]}</td><td>{r["down_legs"]}</td><td>{de(r["up_size_atr"])}</td><td>{de(r["down_size_atr"])}</td><td>{de(r["up_bars"],0)}</td><td>{de(r["down_bars"],0)}</td></tr>' for nm, r in S2['by_regime'].items())
 corrA = ''.join(f'<tr><td>{nm}</td><td>{r["n"]}</td><td>{pct(r["retr_ge_0.382"])}</td><td>{pct(r["retr_ge_0.5"])}</td><td>{pct(r["retr_ge_0.618"])}</td><td>{pct(r["retr_ge_1.0"])}</td><td>{pct(S2["corrections_null"][nm]["retr_ge_0.5"])}</td><td>{pct(S2["corrections_null"][nm]["retr_ge_1.0"])}</td></tr>' for nm, r in S2['corrections'].items())
@@ -197,6 +215,7 @@ nav a{{margin-right:12px}} .btn{{display:inline-block;background:#8a6d0b;color:#
 <img src="charts/equity_scaling.png" alt="Equity Skalierung">
 <p><b>Bewertung:</b> Die Skalierung erhöht das Risiko deutlich (Drawdown ×5–8) und verbessert die Erwartung nicht; mit nachgezogenem SL sinkt die Trefferquote auf ~3 %, weil fast jeder Rücklauf den Korb mit Verlust schließt. Empfohlene Grenzen, falls überhaupt getestet: max. 15 Positionen, max. Korbrisiko 2 % der Equity bzw. 200 $, Tagesverlust-Limit 3 %, EA-Stopp bei 20 % Drawdown (alles im EA umgesetzt).</p>
 
+{FLAT}
 <h2 id="e">E. Ausbruchserkennung</h2>
 <p>Ein einzelner Docht/Touch gilt nie als bestätigt. Bewertet: Erreicht der Kurs nach der Bestätigung +2 ATR in Ausbruchsrichtung, bevor er 0,5 ATR zurück in die Range läuft? Vergleich mit Zufallserwartung.</p>
 {bo_tab()}
