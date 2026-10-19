@@ -110,6 +110,38 @@ FLAT = f'''<h3 id="d2">Nachtrag: Gleichmäßige Skalierung 1-1-1-1 (max. 4 Posit
 <p><b>Bewertung:</b> 1-1-1-1 ist weniger riskant als 1-2-4-8, aber <b>kein Vorteil</b>: Mit festem SL (F1) bleibt die Erwartung negativ (IS {de(FL["F1: 1-1-1-1, fester SL"]["IS 2015–2021"]["expectancy"])} $, OOS {de(FL["F1: 1-1-1-1, fester SL"]["OOS 2022–2025"]["expectancy"])} $ je Korb), der Drawdown steigt gegenüber einer Position etwa auf das 2,3-Fache, und der Swap wächst stark (mehr Volumen über Nacht). Der Profitfaktor ist leicht höher als ohne Skalierung (Gesamt {de(FL["F1: 1-1-1-1, fester SL"]["Gesamt"]["profit_factor"])} vs. {de(FL["S0: 1 Position, fester SL"]["Gesamt"]["profit_factor"])}), das 95 %-Konfidenzintervall der Erwartung umfasst aber klar die Null – nicht signifikant. Mit nachgezogenem SL (F2) wird es deutlich schlechter (PF {de(FL["F2: 1-1-1-1, SL stufenweise nachgezogen"]["Gesamt"]["profit_factor"])}), weil die meisten Körbe nach Stufe 2 am Einstieg ausgestoppt werden. Hinweis: Der MQL5-EA unterstützt aktuell nur 1-2-4-8 bzw. 1 Position; 1-1-1-1 wurde nur im Python-Backtest getestet.</p>
 '''
 
+TH = json.load(open(OUT + '/thresholds.json')); shutil.copy(OUT + '/thresholds.json', SITE + '/thresholds.json')
+TN = [k for k in TH if not k.startswith('_')]
+t1 = '<table><tr><th>ZigZag-Schwelle</th><th>Swings/Jahr</th><th>Zufallsmodell Swings/Jahr</th><th>Größe $ (25 % / Median / 75 %)</th><th>Median in % vom Preis</th><th>Median-Dauer (Tage)</th><th>Richtungswechsel zw. Ausbrüchen (Median)</th><th>… Zufallsmodell</th><th>Ausbrüche/Jahr</th></tr>' + ''.join(
+    f'<tr><td>{n}</td><td>{de(TH[n]["legs"]["per_year"],1)}</td><td>{de(TH[n]["legs_null_per_year"],1)}</td><td>{de(TH[n]["legs"]["usd_p25"],0)} / {de(TH[n]["legs"]["usd_med"],0)} / {de(TH[n]["legs"]["usd_p75"],0)}</td><td>{de(TH[n]["legs"]["pct_med"])} %</td><td>{de(TH[n]["legs"]["days_med"],1)}</td><td>{de(TH[n]["between"]["changes_median"],0)}</td><td>{de(TH[n]["between_null_median"],1)}</td><td>{de(TH[n]["between"]["per_year"],1)}</td></tr>' for n in TN) + '</table>'
+t2 = '<table><tr><th>ZigZag-Schwelle</th><th>n Berührungen</th><th>Umkehr bis Mitte</th><th>Zufallserwartung (Irrfahrt)</th><th>z</th><th>p</th><th>p (Holm, 9 Tests)</th><th>Überschuss echt</th><th>Überschuss Zufallsmodell (Mittel ± SD, 10 Läufe)</th><th>z ggü. Zufallsmodell</th></tr>' + ''.join(
+    f'<tr><td>{n}</td><td>{TH[n]["touch"]["Alle"]["n"]}</td><td>{pct(TH[n]["touch"]["Alle"]["win_rate"])}</td><td>{pct(TH[n]["touch"]["Alle"]["expected_random"])}</td><td>{de(TH[n]["touch"]["Alle"]["z"])}</td><td>{de(TH[n]["touch"]["Alle"]["p_value"],3)}</td><td>{de(TH[n]["touch"]["Alle"]["p_holm"],3)}</td><td>{de(100*TH[n]["touch_null"]["real_excess"],1)} %-Pkt.</td><td>{de(100*TH[n]["touch_null"]["null_mean"],1)} ± {de(100*TH[n]["touch_null"]["null_sd"],1)}</td><td>{de(TH[n]["touch_null"]["z_vs_null"])}</td></tr>' for n in TN) + '</table>'
+TK = [x for x in KEYS if x[0] not in ('gross_total', 'max_units')] + [('p_holm', 'p (Holm, 18 Tests je Zeitraum)', 3)]
+th_tabs = ''
+for sc in ('ohne Skalierung', '1-1-1-1, fester SL'):
+    for per in ('IS 2015–2021', 'OOS 2022–2025'):
+        th_tabs += f'<h4>{sc} – {per}</h4>' + mtab({n: TH[n]['backtest'][sc][per] for n in TN}, TK)
+treg = '<table><tr><th>Schwelle</th><th>Skalierung</th><th>Zeitraum</th>' + ''.join(f'<th>{r} n / Erw. $ / PF</th>' for r in ('Aufwärtstrend', 'Abwärtstrend', 'Seitwärts')) + '</tr>'
+for n in TN:
+    for sc in ('ohne Skalierung', '1-1-1-1, fester SL'):
+        for per in ('IS 2015–2021', 'OOS 2022–2025'):
+            br = TH[n]['backtest'][sc][per].get('by_regime', {})
+            treg += f'<tr><td>{n}</td><td>{sc}</td><td>{per}</td>' + ''.join(
+                (f'<td>{br[r]["n"]} / {de(br[r]["expectancy"])} / {de(br[r]["profit_factor"])}</td>' if r in br else '<td>–</td>') for r in ('Aufwärtstrend', 'Abwärtstrend', 'Seitwärts')) + '</tr>'
+treg += '</table>'
+b100 = TH['100 $']['backtest']
+THSEC = f'''<h2 id="gross">Nachtrag: Nur große H4-ZigZags (Mindest-Swinggröße)</h2>
+<p>Jawad beachtet nur große Swings und ignoriert kleine (z. B. +20/−10). Die genannte Größenordnung „100 bis 400“ ist mehrdeutig (Pips/Punkte = 10–40 $ oder 100–400 $ Kursbewegung). Deshalb wurde der ZigZag zusätzlich mit <b>festen Mindestgrößen</b> (10, 20, 40, 100, 200 $) und <b>prozentualen Mindestgrößen</b> (1 %, 2 %, 3 % vom Preis – fair über 2015–2025, als Gold von ~1.100 $ auf ~4.000 $ stieg) getestet. Ein Swing zählt erst, wenn der Kurs mindestens um diese Schwelle vom Extrem zurückläuft (keine Zukunftsinformation). Alles andere wie in der Standardvariante (Range aus den letzten 2 Hochs/Tiefs, Ausbruch C3/C4, bestätigte Umkehr H1, SL 1 ATR, Mindestbreite 3 ATR, keine Höchstbreite, Basiskosten). Zufallsmodell = permutierte H4-Kerzen (10 Läufe).</p>
+<h3>Swings und Ranges je Schwelle</h3>{t1}
+<p>Die Swing-Anzahl und die Zahl der Richtungswechsel zwischen Ausbrüchen entsprechen bei jeder Schwelle praktisch dem Zufallsmodell. Hinweis: Eine feste $-Schwelle ist über die Jahre nicht vergleichbar (10 $ war 2015 fast 1 %, 2025 nur ~0,3 %); 200 $ liefert nur ~3 Swings pro Jahr.</p>
+<h3>Umkehr an der Range-Grenze vs. Zufall</h3>{t2}
+<p><b>Ergebnis:</b> Bei <i>keiner</i> Schwelle kehrt der Kurs an der Grenze häufiger um als zufällig. Je größer die Swings, desto <b>schlechter</b>: bei 40 $, 2 % und 3 % liegt die Umkehrquote 8–10 Prozentpunkte unter der Zufallserwartung (z ggü. Zufallsmodell ≈ −3 bis −3,9; im Irrfahrt-Test nach Holm-Korrektur knapp nicht signifikant, p ≈ 0,10–0,12). An den Grenzen großer Ranges setzt sich eher der Ausbruch fort. Für eine Ausbruchs-Strategie ist das nur eine Hypothese – sie wurde hier nicht getestet.</p>
+<img src="charts/thresholds.png" alt="Schwellen-Vergleich">
+<h3>Backtest je Schwelle (nach Kosten)</h3>{th_tabs}
+<h4>Nach Regime</h4>{treg}
+<p><b>Bewertung inkl. Mehrfachtests:</b> 9 Schwellen × 2 Skalierungen = 18 Varianten je Zeitraum. Einige sind im In-Sample leicht positiv (z. B. 20 $, 2 %, 3 % mit 1-1-1-1), fallen im Out-of-Sample aber alle unter PF 1. Einzige Ausnahme ist 100 $: gesamt PF {de(b100["ohne Skalierung"]["Gesamt"]["profit_factor"])} ohne Skalierung bzw. {de(b100["1-1-1-1, fester SL"]["Gesamt"]["profit_factor"])} mit 1-1-1-1. Das beruht aber auf nur {b100["ohne Skalierung"]["Gesamt"]["n"]} Trades in 11 Jahren (IS 6, OOS 11), mit Out-of-Sample-PF {de(b100["ohne Skalierung"]["OOS 2022–2025"]["profit_factor"])} bzw. {de(b100["1-1-1-1, fester SL"]["OOS 2022–2025"]["profit_factor"])}, p = {de(b100["ohne Skalierung"]["Gesamt"]["p_value"],2)}. Das ist statistisch nicht von Zufall unterscheidbar. Nach Holm-Korrektur ist kein Ergebnis signifikant. <b>Auch mit großen ZigZags zeigen die Daten keine positive Erwartung nach Kosten.</b></p>
+'''
+
 mq5 = html.escape(open(BASE + '/mql5/JawadStrategie.mq5').read())
 regA = ''.join(f'<tr><td>{nm}</td><td>{r["legs"]}</td><td>{r["up_legs"]}</td><td>{r["down_legs"]}</td><td>{de(r["up_size_atr"])}</td><td>{de(r["down_size_atr"])}</td><td>{de(r["up_bars"],0)}</td><td>{de(r["down_bars"],0)}</td></tr>' for nm, r in S2['by_regime'].items())
 corrA = ''.join(f'<tr><td>{nm}</td><td>{r["n"]}</td><td>{pct(r["retr_ge_0.382"])}</td><td>{pct(r["retr_ge_0.5"])}</td><td>{pct(r["retr_ge_0.618"])}</td><td>{pct(r["retr_ge_1.0"])}</td><td>{pct(S2["corrections_null"][nm]["retr_ge_0.5"])}</td><td>{pct(S2["corrections_null"][nm]["retr_ge_1.0"])}</td></tr>' for nm, r in S2['corrections'].items())
@@ -134,7 +166,7 @@ nav a{{margin-right:12px}} .btn{{display:inline-block;background:#8a6d0b;color:#
 </style></head><body>
 <h1>Jawad Strategie – XAUUSD ZigZag-/Range-Handelssystem</h1>
 <p><b>Forschungsbericht</b> · Stand 19.10.2026 · Daten: XAUUSD M15/H1/H4 (Bid+Ask), 01.01.2015–31.12.2025 (UTC).</p>
-<nav><a href="#fazit">Fazit</a><a href="#daten">Daten</a><a href="#a">A Analyse</a><a href="#b">B Algorithmus</a><a href="#c">C Regeln</a><a href="#d">D Skalierung</a><a href="#e">E Ausbruch</a><a href="#f">F Backtest</a><a href="#risiken">Risiken</a><a href="#g">G MQL5</a><a href="#install">Installation</a></nav>
+<nav><a href="#fazit">Fazit</a><a href="#daten">Daten</a><a href="#a">A Analyse</a><a href="#b">B Algorithmus</a><a href="#c">C Regeln</a><a href="#d">D Skalierung</a><a href="#e">E Ausbruch</a><a href="#f">F Backtest</a><a href="#gross">Große ZigZags</a><a href="#risiken">Risiken</a><a href="#g">G MQL5</a><a href="#install">Installation</a></nav>
 
 <h2 id="fazit">Fazit in Klartext</h2>
 <div class="verdict"><b>Die Daten zeigen KEINE positive Erwartung nach Kosten.</b> Keine der 24 getesteten Parameter-Kombinationen hatte im In-Sample-Zeitraum (2015–2021) einen Profitfaktor über 1; im Out-of-Sample-Zeitraum (2022–2025) lag nur 1 von 24 knapp darüber (Zufallstreffer zu erwarten). Die Standardvariante (bestätigte Umkehr auf H1) verlor nach Kosten im Schnitt {de(M["confH1"]["Gesamt"]["expectancy"])} $ je Trade à 0,01 Lot (PF {de(M["confH1"]["Gesamt"]["profit_factor"])}); selbst <i>ohne jegliche Kosten</i> liegt sie praktisch bei null (PF {de(cf["Gesamt"]["profit_factor"])}). Der Walk-Forward-Test (Parameter jährlich neu aus den 3 Vorjahren gewählt) ergab PF {de(wf["total"]["profit_factor"])} und {de(wf["total"]["net_total"])} $.</div>
@@ -235,6 +267,7 @@ nav a{{margin-right:12px}} .btn{{display:inline-block;background:#8a6d0b;color:#
 {mtab({"Walk-Forward gesamt": wf["total"]}, [x for x in KEYS if x[0] in ("n","win_rate","avg_win","avg_loss","expectancy","exp_ci95","p_value","profit_factor","net_total","max_dd","longest_losing_streak")])}
 <img src="charts/walkforward.png" alt="Walk-Forward">
 
+{THSEC}
 <h2 id="risiken">Größte Risiken</h2>
 <ol>
 <li><b>Keine nachgewiesene Erwartung</b>: Die Idee „an der Linie umkehren“ ist in 11 Jahren Gold-Daten nicht besser als Zufall; Kosten machen sie negativ.</li>

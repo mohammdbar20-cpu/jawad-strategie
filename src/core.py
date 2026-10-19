@@ -10,7 +10,8 @@ def atr(h, l, c, n=14):
         a[i] = (a[i-1]*(n-1) + tr[i]) / n
     return a, tr
 
-def zigzag(h, l, a, k):
+def zigzag(h, l, a, k, thr=None):
+    """thr: optional ('usd', x) = feste Mindest-Swinggröße in $, ('pct', x) = x % vom Preis; sonst k*ATR."""
     """Bestätigte Pivots. Ein Hoch gilt erst als bestätigt, wenn der Kurs danach um k*ATR
     vom Extrem gefallen ist (bekannt am Schluss der Bestätigungskerze). Rückgabe:
     Liste (pivot_idx, preis, typ(+1 Hoch/-1 Tief), confirm_idx)."""
@@ -19,7 +20,7 @@ def zigzag(h, l, a, k):
         if np.isnan(a[i]): 
             ehi, ehi_i, elo, elo_i = (h[i], i, l[i], i) if h[i] > ehi or l[i] < elo else (ehi, ehi_i, elo, elo_i)
             continue
-        th = k * a[i]
+        th = k * a[i] if thr is None else (thr[1] if thr[0] == 'usd' else thr[1] / 100.0 * h[i])
         if d >= 0:
             if h[i] > ehi: ehi, ehi_i = h[i], i
             elif ehi - l[i] >= th:
@@ -68,12 +69,12 @@ def bo_signal(crit, i, o, h, l, c, tr, U, L, a, prev_out):
         if c[i] < L and prev_out == -1: return -1
         return 0
 
-def range_state(h4, k=2.0, crit='C34', minW=3.0, maxW=20.0, nmem=2):
+def range_state(h4, k=2.0, crit='C34', minW=3.0, maxW=20.0, nmem=2, thr=None):
     """Zustand nach Schluss jeder H4-Kerze i: obere/untere Linie, gültig?, Ausbruch, Range-ID.
     Nur Information bis einschließlich Kerze i wird verwendet."""
     o, h, l, c = (h4[x].values for x in 'ohlc')
     a, tr = atr(h, l, c)
-    piv = zigzag(h, l, a, k)
+    piv = zigzag(h, l, a, k, thr)
     n = len(c)
     U = np.full(n, np.nan); Lo = np.full(n, np.nan); valid = np.zeros(n, bool)
     bo = np.zeros(n, int); rid = np.zeros(n, int); npiv = np.zeros(n, int)

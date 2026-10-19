@@ -27,15 +27,15 @@ class Ctx:
         self.m15_pl = np.r_[np.nan, self.l[:-1]]; self.m15_ph = np.r_[np.nan, self.h[:-1]]
         self.reg, _ = core.regime(self.h4.c.values)
         self._st = {}
-    def state(self, k, crit, minW):
-        key = (k, crit, minW)
-        if key not in self._st: self._st[key] = core.range_state(self.h4, k=k, crit=crit, minW=minW)
+    def state(self, k, crit, minW, thr=None, maxW=20.0):
+        key = (k, crit, minW, thr, maxW)
+        if key not in self._st: self._st[key] = core.range_state(self.h4, k=k, crit=crit, minW=minW, thr=thr, maxW=maxW)
         return self._st[key]
 
 def run(ctx, k=2.0, crit='C34', minW=3.0, slB=1.0, entry='confH1', scale='none', stop='fixed',
         spread=0.30, slip=0.05, comm_lot=7.0, swap=True, risk_cap=None, lev=100, zone=0.25, tp_buf=0.1,
-        expiry_h=24, rr_min=1.0, bo_exit=True, start=None, end=None):
-    st = ctx.state(k, crit, minW)
+        expiry_h=24, rr_min=1.0, bo_exit=True, start=None, end=None, thr=None, maxW=20.0):
+    st = ctx.state(k, crit, minW, thr, maxW)
     U_, L_, V_, R_, A_, BO_ = st['U'], st['L'], st['valid'], st['rid'], st['atr'], st['bo']
     o, h, l, c, hi = ctx.o, ctx.h, ctx.l, ctx.c, ctx.hi
     n = len(o); units = [1, 2, 4, 8] if scale == 'pyr' else [1, 1, 1, 1] if scale == 'flat' else ([1, 0, 0, 0] if stop == 'step' else [1])

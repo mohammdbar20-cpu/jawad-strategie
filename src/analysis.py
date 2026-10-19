@@ -84,8 +84,8 @@ def zigzag_repeat(h4, k=2.0, tol=1.0):
     return dict(n_pivots=len(piv), share_repeating=round(float(share), 3), runs=int(len(runs)),
                 run_median=float(np.median(runs)) if len(runs) else 0, run_p90=float(np.percentile(runs, 90)) if len(runs) else 0)
 
-def between_breakouts(h4, k=2.0, crit='C34'):
-    st = core.range_state(h4, k=k, crit=crit)
+def between_breakouts(h4, k=2.0, crit='C34', **kw):
+    st = core.range_state(h4, k=k, crit=crit, **kw)
     bos = np.where(st['bo'] != 0)[0]; conf = np.array([p[3] for p in st['piv']])
     cnt = [int(((conf > b0) & (conf <= b1)).sum()) for b0, b1 in zip(bos[:-1], bos[1:])]
     dur = np.diff(bos)
@@ -93,12 +93,12 @@ def between_breakouts(h4, k=2.0, crit='C34'):
                 changes_p25=float(np.percentile(cnt, 25)), changes_p75=float(np.percentile(cnt, 75)),
                 bars_between_median=float(np.median(dur)), _cnt=cnt)
 
-def touch_events(h4, k=2.0, crit='C34', sl_atr=1.0, target='mid'):
+def touch_events(h4, k=2.0, crit='C34', sl_atr=1.0, target='mid', **kw):
     """Jede Berührung einer gültigen Range-Grenze (Kurs erreicht die Linie). Ergebnis: wird zuerst das
     Ziel (Mitte bzw. Gegenlinie) oder der Stop (Linie ± sl_atr*ATR) erreicht? Konservativ: beide in
     derselben Kerze = Verlust. p0 = Trefferwahrscheinlichkeit einer driftfreien Irrfahrt = SL/(SL+TP)."""
     o, h, l, c = (h4[x].values for x in 'ohlc'); n = len(c)
-    st = core.range_state(h4, k=k, crit=crit); a = st['atr']
+    st = core.range_state(h4, k=k, crit=crit, **kw); a = st['atr']
     reg, _ = core.regime(c); volr = a / pd.Series(a).rolling(100).mean().values
     ev = []; i = 1; used = set()
     while i < n:
